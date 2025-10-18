@@ -31,11 +31,12 @@ def interactive_mode():
             arq1 = input("\ncaminho do arquivo .npy da classe 1: ").strip()
             arq2 = input("caminho do arquivo .npy da classe 2: ").strip()
             arq3 = input("caminho do arquivo .npy da classe 3: ").strip()
+            dir_imagens = input("caminho base das imagens (se vazio, retorna índice): ").strip() or None
             kernel = input("kernel (ex: linear, rbf, poly): ").strip()
             c = float(input("margem de erro C: "))
             folds = int(input("número de folds: "))
 
-            ia = inteligencia_artificial(arq1, arq2, arq3, kernel, c, folds)
+            ia = inteligencia_artificial(arq1, arq2, arq3, kernel, c, folds, dir_imagens)
             ia.carregar_dados()
             ia.set_svm()
             ia.avaliar_modelo()
@@ -47,11 +48,12 @@ def interactive_mode():
             arq1 = input("\ncaminho do arquivo .npy da classe 1: ").strip()
             arq2 = input("caminho do arquivo .npy da classe 2: ").strip()
             arq3 = input("caminho do arquivo .npy da classe 3: ").strip()
+            dir_imagens = input("caminho base das imagens (se vazio, retorna índice): ").strip() or None
             kernel = input("kernel (ex: linear, rbf, poly): ").strip()
             c = float(input("margem de erro C: "))
             folds = int(input("número de folds: "))
 
-            ia = inteligencia_artificial(arq1, arq2, arq3, kernel, c, folds)
+            ia = inteligencia_artificial(arq1, arq2, arq3, kernel, c, folds, dir_imagens)
             ia.carregar_dados()
             ia.set_svm()
             ia.avaliar_modelo()

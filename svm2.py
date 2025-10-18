@@ -6,9 +6,11 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import f1_score
 from sklearn.model_selection import GridSearchCV
+import glob
+import os
 
 class inteligencia_artificial:
-    def __init__(self, arq1, arq2, arq3, kernel="linear", C=1, n_splits=5):
+    def __init__(self, arq1, arq2, arq3, kernel="linear", C=1, n_splits=5, dir_imagens=None):
         self.scaler = StandardScaler()
         self.arq1 = arq1
         self.arq2 = arq2
@@ -19,6 +21,7 @@ class inteligencia_artificial:
         self.svm = None
         self.X = None
         self.y = None
+        self.dir_imagens = dir_imagens
 
     def carregar_dados(self):
         f1 = np.load(self.arq1)
@@ -34,13 +37,15 @@ class inteligencia_artificial:
                 raise ValueError("os arquivos .npy devem ser informados para executar o grid search.")
             self.carregar_dados()
 
-        graus = [0, 1, 5] # caso kernel polinomial, controla complexidade
-        cs = [0.1, 1, 10] # margem de erro
-        gammas = [0.1, 1, 10] # sensibilidade
+        # graus = [0, 1, 5] # caso kernel polinomial, controla complexidade
+        cs = [0.1, 1, 10, 100, 1000] # margem de erro
+        # gammas = [0.1, 1, 10] # sensibilidade
+        gammas = [2e-5, 2e-3, 2e-1, "auto", "scale"]
+
         # kernels = ['linear', 'rbf', 'poly'] # separação entre classes (reta, curvada, muito curvada)
         param_grid = [
             {'kernel': ['linear'], 'C': cs},
-            {'kernel': ['poly'], 'C': cs, 'degree': graus, 'gamma': gammas},
+            # {'kernel': ['poly'], 'C': cs, 'degree': graus, 'gamma': gammas},
             {'kernel': ['rbf'], 'C': cs, 'gamma': gammas}
         ]
 
@@ -52,10 +57,49 @@ class inteligencia_artificial:
     def set_svm(self):
         self.svm = SVC(kernel=self.kernel, C=self.C)
 
+    def reportar_erros(self, y_test, y_pred, test_idx, len_f1, len_f2, len_f3):
+        erros = np.where(y_pred != y_test)[0] # onde a predição foi diferente do valor real
+
+        if(erros.size > 0):
+            print("amostras classificadas incorretamente:")
+            for i in erros: # para cada erro
+                global_idx = test_idx[i] # índice original (ordem numérica nas pastas)
+                true_label = y_test[i] # rótulo real
+                pred_label = y_pred[i] # rótulo predito pela svm
+
+                # de qual classe veio a amostra
+                if global_idx < len_f1: # primeira classe
+                    classe_real = "f1"
+                elif global_idx < len_f1 + len_f2: # segunda classe
+                    classe_real = "f2"
+                else: # terceira classe
+                    classe_real = "f3"
+
+                if self.dir_imagens: # diretório informado
+                    pasta_classe = os.path.join(self.dir_imagens, "images", "tf.keras", classe_real) # caminho da pasta
+                    arquivos = glob.glob(os.path.join(pasta_classe, "*.jpg")) # lista todos os arquivos da pasta
+
+                    if arquivos: # encontrou arquivos
+                        caminho = arquivos[global_idx % len(arquivos)]  # pega um arquivo da classe
+                        print(f"  [label era {true_label} ({classe_real}) - predizeu {pred_label} (0=f1, 1=f2, 3=f3)], imagem:  {caminho}")
+                    else: # não encontrou arquivos
+                        print(f"  [label era {true_label} ({classe_real}) - predizeu {pred_label} (0=f1, 1=f2, 3=f3)], nenhuma imagem encontrada")
+                else: # diretório não foi informado, usa posição global dentro das pastas
+                    print(f"  [label era {true_label} - predizeu {pred_label} (0=f1, 1=f2, 3=f3)], sem diretório, índice {global_idx}")
+
     def avaliar_modelo(self):
         seed = random.randint(0, 10000)
         skf = StratifiedKFold(n_splits=self.n_splits, shuffle=True, random_state=seed)
         f1_folds = []
+    
+        if self.dir_imagens is None:
+            print("\ncaminho base das imagens não informado. os erros não mostrarão caminhos de arquivos.")
+        else:
+            print(f"\nusando diretório base das imagens: {self.dir_imagens}")
+
+        len_f1 = np.load(self.arq1).shape[0] # tamanho pra usar em reportar_erros
+        len_f2 = np.load(self.arq2).shape[0]
+        len_f3 = np.load(self.arq3).shape[0]
 
         for fold, (train_idx, test_idx) in enumerate(skf.split(self.X, self.y), 1): # para cada fold de indice e testes dentro do range (X, y)
             X_train = self.X[train_idx] 
@@ -75,10 +119,12 @@ class inteligencia_artificial:
             f1_folds.append(f1)
             print(f"fold {fold} teve f1_score de {f1:.4f}")
 
+            self.reportar_erros(y_test, y_pred, test_idx, len_f1, len_f2, len_f3)
+
         media_f1 = np.mean(f1_folds)
         desvio_f1 = np.std(f1_folds)
 
-        print(f"acurácia média: {(media_f1):.4f}")
+        print(f"f1 média: {(media_f1):.4f}")
         print(f"desvio padrão: {np.std(f1_folds):.4f}")
         return media_f1, desvio_f1
     
@@ -92,6 +138,14 @@ class inteligencia_artificial:
         y_novo = np.array([0]*len(f1_novo) + [1]*len(f2_novo) + [2]*len(f3_novo))
 
         y_pred_novo = self.svm.predict(X_novo)
+
+        len_f1 = len(f1_novo) # tamanho pra usar em reportar_erros
+        len_f2 = len(f2_novo)
+        len_f3 = len(f3_novo)
+
+        test_idx = np.arange(len(y_novo)) # simular global_idx
+
+        self.reportar_erros(y_novo, y_pred_novo, test_idx, len_f1, len_f2, len_f3)
         f1 = f1_score(y_novo, y_pred_novo, average='weighted')
         return f1
 
@@ -103,6 +157,7 @@ def main():
     treinamento.add_argument("--arq1", help="caminho do arquivo .npy da classe 1")
     treinamento.add_argument("--arq2", help="caminho do arquivo .npy da classe 2")
     treinamento.add_argument("--arq3", help="caminho do arquivo .npy da classe 3")
+    treinamento.add_argument("--dir_imagens", help="diretório base onde estão as imagens das classes")
     treinamento.add_argument("--kernel", default="linear", help="kernel (ex: linear, rbf, poly)")
     treinamento.add_argument("--c", type=float, default=1.0, help="margem de erro C")
     treinamento.add_argument("--folds", type=int, default=5, help="número de folds")
@@ -116,6 +171,7 @@ def main():
     dataset_teste.add_argument("--arq1", help="caminho do arquivo .npy da classe 1")
     dataset_teste.add_argument("--arq2", help="caminho do arquivo .npy da classe 2")
     dataset_teste.add_argument("--arq3", help="caminho do arquivo .npy da classe 3")
+    dataset_teste.add_argument("--dir_imagens", help="diretório base onde estão as imagens das classes")
     dataset_teste.add_argument("--kernel", default="linear", help="kernel (ex: linear, rbf, poly)")
     dataset_teste.add_argument("--c", type=float, default=1.0, help="margem de erro C")
     dataset_teste.add_argument("--folds", type=int, default=5, help="número de folds")
@@ -140,7 +196,7 @@ def main():
     
     # metadados básicos
     if args.command == "treinamento":
-        ia = inteligencia_artificial(args.arq1, args.arq2, args.arq3, args.kernel, args.c, args.folds)
+        ia = inteligencia_artificial(args.arq1, args.arq2, args.arq3, args.kernel, args.c, args.folds, args.dir_imagens)
         ia.carregar_dados()
         ia.set_svm()
         ia.avaliar_modelo()
@@ -148,7 +204,7 @@ def main():
         ia = inteligencia_artificial(args.arq1, args.arq2, args.arq3)
         ia.grid_search()
     elif args.command == "dataset_teste":
-        ia = inteligencia_artificial(args.arq1, args.arq2, args.arq3, args.kernel, args.c, args.folds)
+        ia = inteligencia_artificial(args.arq1, args.arq2, args.arq3, args.kernel, args.c, args.folds, args.dir_imagens)
         ia.carregar_dados()
         ia.set_svm()
         ia.avaliar_modelo()
@@ -160,3 +216,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# python svm2.py dataset_teste --arq1 imagens-saida/f1.npy --arq2 imagens-saida/f2.npy --arq3 imagens-saida/f3.npy --dir_imagens imagens-saida --kernel linear --c 0.1 --folds 5 --novo_arq1 totais/f1.npy --novo_arq2 totais/f2.npy --novo_arq3 totais/f3.npy            
+# python svm2.py treinamento --arq1 imagens-saida/f1.npy --arq2 imagens-saida/f2.npy --arq3 imagens-saida/f3.npy --dir_imagens imagens-saida --kernel linear --c 0.1 --folds 5
