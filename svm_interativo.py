@@ -24,7 +24,7 @@ def interactive_mode():
             grid = inteligencia_artificial(arq1, arq2, arq3)
             grid.grid_search()
 
-            finalizar = input("\nexecutar outro método?\n[S] sim\n[N] não\natenção: é case-sensitive\n").strip()
+            finalizar = input("\nexecutar outro método?\n[S] sim\n[N] não\n").strip().upper()
             if finalizar == "N":
                 break
         elif choice2 == "2":
@@ -39,9 +39,11 @@ def interactive_mode():
             ia = inteligencia_artificial(arq1, arq2, arq3, kernel, c, folds, dir_imagens)
             ia.carregar_dados()
             ia.set_svm()
-            ia.avaliar_modelo()
 
-            finalizar = input("\nexecutar outro método?\n[S] sim\n[N] não\natenção: é case-sensitive\n").strip()
+            mostrar_matriz = input("deseja mostrar a matriz de confusão?\n[S] sim\n[N] não\n ").strip().upper() == "S"
+            ia.avaliar_modelo(matriz=mostrar_matriz)
+
+            finalizar = input("\nexecutar outro método?\n[S] sim\n[N] não\n").strip().upper()
             if finalizar == "N":
                 break
         elif choice2 == "3":
@@ -64,9 +66,11 @@ def interactive_mode():
             n_arq1 = input("\ninforme o nome do NOVO primeiro arquivo .npy de features a ser TESTADO: ").strip()
             n_arq2 = input("informe o nome do NOVO segundo arquivo .npy de features a ser TESTADO: ").strip()
             n_arq3 = input("informe o nome do NOVO terceiro arquivo .npy de features a ser TESTADO: ").strip()
-            f1_novo = ia.prever_novo_dataset(n_arq1, n_arq2, n_arq3)
+            mostrar_matriz = input("deseja mostrar a matriz de confusão?\n[S] sim\n[N] não\n").strip().upper() == "S"
+            
+            f1_novo = ia.prever_novo_dataset(n_arq1, n_arq2, n_arq3, matriz=mostrar_matriz)
             print(f"\nF1-score no novo dataset: {f1_novo:.4f}")
 
-            finalizar = input("\nexecutar outro método?\n[S] sim\n[N] não\natenção: é case-sensitive\n").strip()
+            finalizar = input("\nexecutar outro método?\n[S] sim\n[N] não\n").strip().upper()
             if finalizar == "N":
                 break

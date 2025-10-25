@@ -1,10 +1,12 @@
 import argparse
 import random
 import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
 from sklearn.svm import SVC
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import StratifiedKFold
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, confusion_matrix
 from sklearn.model_selection import GridSearchCV
 import glob
 import os
@@ -81,13 +83,28 @@ class inteligencia_artificial:
 
                     if arquivos: # encontrou arquivos
                         caminho = arquivos[global_idx % len(arquivos)]  # pega um arquivo da classe
-                        print(f"  [label era {true_label} ({classe_real}) - predizeu {pred_label} (0=f1, 1=f2, 3=f3)], imagem:  {caminho}")
+                        print(f"  [label era {true_label} ({classe_real}) - predizeu {pred_label} (0=f1, 1=f2, 2=f3)], imagem:  {caminho}")
                     else: # não encontrou arquivos
-                        print(f"  [label era {true_label} ({classe_real}) - predizeu {pred_label} (0=f1, 1=f2, 3=f3)], nenhuma imagem encontrada")
+                        print(f"  [label era {true_label} ({classe_real}) - predizeu {pred_label} (0=f1, 1=f2, 2=f3)], nenhuma imagem encontrada")
                 else: # diretório não foi informado, usa posição global dentro das pastas
-                    print(f"  [label era {true_label} - predizeu {pred_label} (0=f1, 1=f2, 3=f3)], sem diretório, índice {global_idx}")
+                    print(f"  [label era {true_label} - predizeu {pred_label} (0=f1, 1=f2, 2=f3)], sem diretório, índice {global_idx}")
 
-    def avaliar_modelo(self):
+    def matriz_confusao(self, y_true, y_pred, rotulos_classes=None): # se true, mostra proporções ao inves de contagens
+        cm = confusion_matrix(y_true, y_pred)
+
+        if rotulos_classes is None:
+            rotulos_classes = [str(i) for i in np.unique(y_true)]
+
+        plt.figure(figsize=(6, 5))
+        sns.heatmap(cm, annot=True, fmt="d", cmap="Greens", xticklabels=rotulos_classes, yticklabels=rotulos_classes)
+        plt.xlabel("classe prevista")
+        plt.ylabel("classe real")
+        plt.title("matriz de confusão")
+        plt.show()
+        
+        return cm
+
+    def avaliar_modelo(self, matriz=False):
         seed = random.randint(0, 10000)
         skf = StratifiedKFold(n_splits=self.n_splits, shuffle=True, random_state=seed)
         f1_folds = []
@@ -100,6 +117,9 @@ class inteligencia_artificial:
         len_f1 = np.load(self.arq1).shape[0] # tamanho pra usar em reportar_erros
         len_f2 = np.load(self.arq2).shape[0]
         len_f3 = np.load(self.arq3).shape[0]
+
+        y_true_all = [] # pra matriz de confusão
+        y_pred_all = [] 
 
         for fold, (train_idx, test_idx) in enumerate(skf.split(self.X, self.y), 1): # para cada fold de indice e testes dentro do range (X, y)
             X_train = self.X[train_idx] 
@@ -115,6 +135,9 @@ class inteligencia_artificial:
             self.svm.fit(X_train, y_train) # treino
             y_pred = self.svm.predict(X_test) # predição
 
+            y_true_all.extend(y_test)
+            y_pred_all.extend(y_pred)
+
             f1 = f1_score(y_test, y_pred, average='weighted')
             f1_folds.append(f1)
             print(f"fold {fold} teve f1_score de {f1:.4f}")
@@ -126,9 +149,13 @@ class inteligencia_artificial:
 
         print(f"f1 média: {(media_f1):.4f}")
         print(f"desvio padrão: {np.std(f1_folds):.4f}")
+
+        if(matriz):
+            self.matriz_confusao(y_true_all, y_pred_all, rotulos_classes=["f1", "f2", "f3"])
+
         return media_f1, desvio_f1
     
-    def prever_novo_dataset(self, arq1, arq2, arq3):
+    def prever_novo_dataset(self, arq1, arq2, arq3, matriz=True):
         f1_novo = np.load(arq1)
         f2_novo = np.load(arq2)
         f3_novo = np.load(arq3)
@@ -147,6 +174,10 @@ class inteligencia_artificial:
 
         self.reportar_erros(y_novo, y_pred_novo, test_idx, len_f1, len_f2, len_f3)
         f1 = f1_score(y_novo, y_pred_novo, average='weighted')
+
+        if(matriz):
+            self.matriz_confusao(y_novo, y_pred_novo, rotulos_classes=["f1", "f2", "f3"])
+
         return f1
 
 def main():
@@ -161,6 +192,7 @@ def main():
     treinamento.add_argument("--kernel", default="linear", help="kernel (ex: linear, rbf, poly)")
     treinamento.add_argument("--c", type=float, default=1.0, help="margem de erro C")
     treinamento.add_argument("--folds", type=int, default=5, help="número de folds")
+    treinamento.add_argument("--matriz", type=int, choices=[0, 1], default=1, help="se 1, mostra a matriz de confusão, se 0 não mostra")
 
     grid_search = subparsers.add_parser("grid_search", help="busca dos melhores parâmtetros para o classificador")
     grid_search.add_argument("--arq1", help="caminho do arquivo .npy da classe 1")
@@ -178,6 +210,7 @@ def main():
     dataset_teste.add_argument("--novo_arq1", help="caminho do arquivo .npy da classe 1 a ser TESTADA")
     dataset_teste.add_argument("--novo_arq2", help="caminho do arquivo .npy da classe 2 a ser TESTADA")
     dataset_teste.add_argument("--novo_arq3", help="caminho do arquivo .npy da classe 3 a ser TESTADA")
+    dataset_teste.add_argument("--matriz", type=int, choices=[0, 1], default=1, help="se 1, mostra a matriz de confusão, se 0 não mostra")
 
     args = parser.parse_args()
 
@@ -194,12 +227,11 @@ def main():
     elif choice == "2":
         print("\nexecutando o método pedido...")
     
-    # metadados básicos
     if args.command == "treinamento":
         ia = inteligencia_artificial(args.arq1, args.arq2, args.arq3, args.kernel, args.c, args.folds, args.dir_imagens)
         ia.carregar_dados()
         ia.set_svm()
-        ia.avaliar_modelo()
+        ia.avaliar_modelo(matriz=bool(args.matriz))
     elif args.command == "grid_search":
         ia = inteligencia_artificial(args.arq1, args.arq2, args.arq3)
         ia.grid_search()
@@ -211,11 +243,11 @@ def main():
 
         ia.X = ia.scaler.fit_transform(ia.X)  # treinando em cima de todos os dados
         ia.svm.fit(ia.X, ia.y)
-        f1_novo = ia.prever_novo_dataset(args.novo_arq1, args.novo_arq2, args.novo_arq3)
+        f1_novo = ia.prever_novo_dataset(args.novo_arq1, args.novo_arq2, args.novo_arq3, matriz=bool(args.matriz))
         print(f"\nF1-score no novo dataset: {f1_novo:.4f}")
 
 if __name__ == "__main__":
     main()
 
-# python svm2.py dataset_teste --arq1 imagens-saida/f1.npy --arq2 imagens-saida/f2.npy --arq3 imagens-saida/f3.npy --dir_imagens imagens-saida --kernel linear --c 0.1 --folds 5 --novo_arq1 totais/f1.npy --novo_arq2 totais/f2.npy --novo_arq3 totais/f3.npy            
-# python svm2.py treinamento --arq1 imagens-saida/f1.npy --arq2 imagens-saida/f2.npy --arq3 imagens-saida/f3.npy --dir_imagens imagens-saida --kernel linear --c 0.1 --folds 5
+# python svm2.py dataset_teste --arq1 imagens-saida/f1.npy --arq2 imagens-saida/f2.npy --arq3 imagens-saida/f3.npy --dir_imagens imagens-saida --kernel linear --c 0.1 --folds 5 --novo_arq1 totais/f1.npy --novo_arq2 totais/f2.npy --novo_arq3 totais/f3.npy --matriz 1
+# python svm2.py treinamento --arq1 imagens-saida/f1.npy --arq2 imagens-saida/f2.npy --arq3 imagens-saida/f3.npy --dir_imagens imagens-saida --kernel linear --c 0.1 --folds 5 --matriz 1
